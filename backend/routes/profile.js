@@ -7,7 +7,9 @@ const router = express.Router();
 // ── GET /api/profile ──────────────────────────────────
 router.get("/", protect, async (req, res) => {
   try {
-    res.json({ user: req.user });
+    const userObj = req.user.toJSON ? req.user.toJSON() : { ...req.user._doc };
+    userObj.profileImage = userObj.avatar || "";
+    res.json({ user: userObj });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -25,8 +27,16 @@ router.put("/", protect, async (req, res) => {
       if (req.body[key] !== undefined) user[key] = req.body[key];
     });
 
+    // Frontend sends "profileImage" — map it to "avatar" in DB
+    if (req.body.profileImage !== undefined) {
+      user.avatar = req.body.profileImage;
+    }
+
     await user.save();
-    res.json({ message: "Profile updated successfully", user: user.toJSON() });
+    const userObj = user.toJSON();
+    // Return both field names so frontend always gets profileImage
+    userObj.profileImage = userObj.avatar || "";
+    res.json({ message: "Profile updated successfully", user: userObj });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

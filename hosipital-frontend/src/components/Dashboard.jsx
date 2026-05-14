@@ -4,8 +4,27 @@ import Navbar from "./Navbar";
 import { getCurrentUser } from "../systemStore";
 import { appointmentsApi } from "../api";
 
-const endOfAppointmentDay = (appointment) =>
-  new Date(`${appointment.appointmentDate}T23:59:59`).getTime();
+// Normalize backend fields → frontend expected shape
+const normalize = (appt) => ({
+  ...appt,
+  id:              appt.id || appt._id?.toString() || "",
+  doctor:          appt.doctor          || appt.doctorName || "",
+  appointmentDate: appt.appointmentDate || appt.date       || "",
+  appointmentTime: appt.appointmentTime || appt.time       || "",
+  status:          capitalize(appt.status        || "upcoming"),
+  paymentStatus:   capitalize(appt.paymentStatus || "pending"),
+});
+
+function capitalize(str) {
+  if (!str) return "";
+  return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
+}
+
+const endOfAppointmentDay = (appointment) => {
+  const d = appointment.appointmentDate;
+  if (!d) return 0;
+  return new Date(`${d}T23:59:59`).getTime();
+};
 
 const initials = (name = "Patient") =>
   name
@@ -31,7 +50,7 @@ export default function Dashboard() {
     appointmentsApi
       .list()
       .then((data) => {
-        if (mounted) setAppointments(data.appointments || []);
+        if (mounted) setAppointments((data.appointments || []).map(normalize));
       })
       .catch((err) => {
         if (mounted) setError(err.message);

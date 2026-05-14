@@ -18,7 +18,8 @@ app.use(cors({
   origin: process.env.FRONTEND_URL || "*",
   credentials: true,
 }));
-app.use(express.json());
+app.use(express.json({ limit: "10mb" }));
+app.use(express.urlencoded({ limit: "10mb", extended: true }));
 
 // ── Routes ─────────────────────────────────────────────
 app.use("/api/auth",         authRoutes);
@@ -34,6 +35,10 @@ app.get("/api/health", (req, res) => {
 
 // ── Error handler ──────────────────────────────────────
 app.use((err, req, res, next) => {
+  // Handle "request entity too large" clearly
+  if (err.status === 413 || err.type === "entity.too.large") {
+    return res.status(413).json({ error: "Image bahut badi hai. 2MB se chhoti image use karein." });
+  }
   console.error(err.stack);
   res.status(500).json({ error: "Internal server error", message: err.message });
 });

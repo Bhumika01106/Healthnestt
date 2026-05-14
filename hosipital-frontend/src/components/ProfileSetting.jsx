@@ -31,16 +31,9 @@ export default function ProfileSettings() {
 
   const optimizeImage = async (file) => {
     if (!file || !file.type.startsWith("image/")) throw new Error("Please select a valid image.");
-    if (file.size <= 200 * 1024) {
-      return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onloadend = () => resolve(reader.result);
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-      });
-    }
+    // Always resize & compress — even small files get resized for consistency
     const imageBitmap = await createImageBitmap(file);
-    const maxDimension = 1024;
+    const maxDimension = 400; // profile pic — 400px is plenty
     const scale = Math.min(1, maxDimension / imageBitmap.width, maxDimension / imageBitmap.height);
     const width = Math.round(imageBitmap.width * scale);
     const height = Math.round(imageBitmap.height * scale);
@@ -54,7 +47,7 @@ export default function ProfileSettings() {
         reader.onloadend = () => resolve(reader.result);
         reader.onerror = reject;
         reader.readAsDataURL(blob);
-      }, "image/jpeg", 0.8);
+      }, "image/jpeg", 0.65); // 0.65 quality — sharp enough, small enough
     });
   };
 

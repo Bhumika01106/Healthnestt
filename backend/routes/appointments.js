@@ -4,13 +4,25 @@ import { protect } from "../middleware/auth.js";
 
 const router = express.Router();
 
+// Helper: add id + frontend-friendly field aliases to every appointment object
+const toFrontend = (appt) => {
+  const obj = appt.toObject ? appt.toObject() : { ...appt };
+  return {
+    ...obj,
+    id:              obj._id?.toString() || obj.id || "",
+    // frontend reads "doctor", "appointmentDate", "appointmentTime"
+    doctor:          obj.doctorName  || "",
+    appointmentDate: obj.date        || "",
+    appointmentTime: obj.time        || "",
+  };
+};
+
 // ── GET /api/appointments ─────────────────────────────
-// Returns all appointments for the logged-in user
 router.get("/", protect, async (req, res) => {
   try {
     const appointments = await Appointment.find({ userId: req.user._id })
       .sort({ createdAt: -1 });
-    res.json({ appointments });
+    res.json({ appointments: appointments.map(toFrontend) });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -21,14 +33,13 @@ router.get("/:id", protect, async (req, res) => {
   try {
     const appt = await Appointment.findOne({ _id: req.params.id, userId: req.user._id });
     if (!appt) return res.status(404).json({ error: "Appointment not found" });
-    res.json({ appointment: appt });
+    res.json({ appointment: toFrontend(appt) });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
 // ── POST /api/appointments ────────────────────────────
-// Book a new appointment
 router.post("/", protect, async (req, res) => {
   try {
     const {
@@ -37,26 +48,27 @@ router.post("/", protect, async (req, res) => {
     } = req.body;
 
     if (!date || !time || !patient?.fullName || !patient?.email || !patient?.phone) {
-      return res.status(400).json({ error: "Date, time, and patient details (name, email, phone) are required." });
+      return res.status(400).json({
+        error: "Date, time, and patient details (name, email, phone) are required.",
+      });
     }
 
     const appt = await Appointment.create({
-      userId: req.user._id,
-      doctorName: doctorName || "",
-      department: department || "",
+      userId:          req.user._id,
+      doctorName:      doctorName      || "",
+      department:      department      || "",
       date,
       time,
-      fee: fee || "Starting ₹499",
-      paymentMethod: paymentMethod || "offline",
+      fee:             fee             || "Starting ₹499",
+      paymentMethod:   paymentMethod === "online" ? "online" : "offline",
       paymentProvider: paymentProvider || "",
-      paymentStatus: paymentMethod === "online" ? "paid" : "pending",
+      paymentStatus:   paymentMethod === "online" ? "paid" : "pending",
       patient,
     });
 
-    // Return appointment with a friendly id field for the frontend
     res.status(201).json({
       message: "Appointment booked successfully",
-      appointment: { ...appt.toObject(), id: appt._id.toString() },
+      appointment: toFrontend(appt),
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -64,7 +76,6 @@ router.post("/", protect, async (req, res) => {
 });
 
 // ── PUT /api/appointments/:id ─────────────────────────
-// Update / reschedule appointment
 router.put("/:id", protect, async (req, res) => {
   try {
     const appt = await Appointment.findOne({ _id: req.params.id, userId: req.user._id });
@@ -76,14 +87,13 @@ router.put("/:id", protect, async (req, res) => {
     });
 
     await appt.save();
-    res.json({ message: "Appointment updated", appointment: appt });
+    res.json({ message: "Appointment updated", appointment: toFrontend(appt) });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
 // ── DELETE /api/appointments/:id ──────────────────────
-// Cancel appointment
 router.delete("/:id", protect, async (req, res) => {
   try {
     const appt = await Appointment.findOne({ _id: req.params.id, userId: req.user._id });
@@ -91,7 +101,7 @@ router.delete("/:id", protect, async (req, res) => {
 
     appt.status = "cancelled";
     await appt.save();
-    res.json({ message: "Appointment cancelled", appointment: appt });
+    res.json({ message: "Appointment cancelled", appointment: toFrontend(appt) });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

@@ -4,8 +4,30 @@ import Navbar from "./Navbar";
 import { getCurrentUser } from "../systemStore";
 import { appointmentsApi } from "../api";
 
-const endOfAppointmentDay = (appointment) =>
-  new Date(`${appointment.appointmentDate}T23:59:59`).getTime();
+// ── Normalize appointment from backend → frontend shape ──────────────────────
+// Backend fields: doctorName, date, time, status (lowercase), paymentStatus (lowercase), _id
+// Frontend expects: doctor, appointmentDate, appointmentTime, status (Title), paymentStatus (Title), id
+const normalize = (appt) => ({
+  ...appt,
+  id:              appt.id || appt._id?.toString() || "",
+  doctor:          appt.doctor          || appt.doctorName    || "",
+  appointmentDate: appt.appointmentDate || appt.date          || "",
+  appointmentTime: appt.appointmentTime || appt.time          || "",
+  // Normalize status to Title case for frontend comparisons
+  status:        capitalize(appt.status        || "upcoming"),
+  paymentStatus: capitalize(appt.paymentStatus || "pending"),
+});
+
+function capitalize(str) {
+  if (!str) return "";
+  return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
+}
+
+const endOfAppointmentDay = (appointment) => {
+  const d = appointment.appointmentDate;
+  if (!d) return 0;
+  return new Date(`${d}T23:59:59`).getTime();
+};
 
 const statusClass = (status) =>
   status === "Paid"
@@ -40,14 +62,14 @@ const AppointmentCard = ({ appointment, onAction }) => {
         <div className="mt-4 xs:mt-6 flex flex-col xs:flex-row gap-2 xs:gap-3 flex-wrap">
           <button
             type="button"
-            onClick={() => onAction(appointment.id, { status: "Cancelled" })}
+            onClick={() => onAction(appointment.id, { status: "cancelled" })}
             className="rounded-full border border-red-200 bg-red-50 px-3 xs:px-4 sm:px-5 py-2 xs:py-3 text-xs xs:text-sm font-semibold text-red-600 transition hover:bg-red-100 whitespace-nowrap"
           >
             Cancel Appointment
           </button>
           <button
             type="button"
-            onClick={() => onAction(appointment.id, { status: "Reschedule Requested" })}
+            onClick={() => onAction(appointment.id, { status: "reschedule requested" })}
             className="rounded-full border border-slate-200 bg-white px-3 xs:px-4 sm:px-5 py-2 xs:py-3 text-xs xs:text-sm font-semibold text-slate-700 transition hover:border-pink-300 hover:bg-pink-50 whitespace-nowrap"
           >
             Reschedule
@@ -55,7 +77,7 @@ const AppointmentCard = ({ appointment, onAction }) => {
           {pending && (
             <button
               type="button"
-              onClick={() => onAction(appointment.id, { paymentStatus: "Paid", paymentMethod: "online" })}
+              onClick={() => onAction(appointment.id, { paymentStatus: "paid", paymentMethod: "online" })}
               className="rounded-full bg-pink-600 px-3 xs:px-4 sm:px-5 py-2 xs:py-3 text-xs xs:text-sm font-semibold text-white transition hover:bg-pink-700 whitespace-nowrap"
             >
               Pay Now
@@ -82,7 +104,7 @@ export default function MyAppointments() {
     appointmentsApi
       .list()
       .then((data) => {
-        if (mounted) setAppointments(data.appointments || []);
+        if (mounted) setAppointments((data.appointments || []).map(normalize));
       })
       .catch((err) => {
         if (mounted) setError(err.message);
@@ -91,9 +113,7 @@ export default function MyAppointments() {
         if (mounted) setLoading(false);
       });
 
-    return () => {
-      mounted = false;
-    };
+    return () => { mounted = false; };
   }, [user]);
 
   const appointmentsByTab = useMemo(() => {
@@ -104,12 +124,12 @@ export default function MyAppointments() {
 
     return {
       Upcoming: sortedAppointments.filter(
-        (appointment) => appointment.status !== "Cancelled" && endOfAppointmentDay(appointment) >= now
+        (a) => a.status !== "Cancelled" && endOfAppointmentDay(a) >= now
       ),
       Past: sortedAppointments.filter(
-        (appointment) => appointment.status !== "Cancelled" && endOfAppointmentDay(appointment) < now
+        (a) => a.status !== "Cancelled" && endOfAppointmentDay(a) < now
       ),
-      Cancelled: sortedAppointments.filter((appointment) => appointment.status === "Cancelled"),
+      Cancelled: sortedAppointments.filter((a) => a.status === "Cancelled"),
     };
   }, [appointments]);
 
@@ -117,10 +137,9 @@ export default function MyAppointments() {
     setError("");
     try {
       const data = await appointmentsApi.update(appointmentId, updates);
+      const updated = normalize(data.appointment);
       setAppointments((current) =>
-        current.map((appointment) =>
-          appointment.id === appointmentId ? data.appointment : appointment
-        )
+        current.map((a) => (a.id === appointmentId ? updated : a))
       );
     } catch (err) {
       setError(err.message);
